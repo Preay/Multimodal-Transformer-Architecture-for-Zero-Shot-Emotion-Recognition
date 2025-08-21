@@ -1,0 +1,2 @@
+dataset,mode,fusion,baseline,held_out,acc,f1_macro,acc_seen,acc_unseen,harmonic
+ravdess,multimodal,cross_attention,model,,0.3958333333333333,0.3874435895486202,0.6095890410958904,0.3958333333333333,0.47998864604030655

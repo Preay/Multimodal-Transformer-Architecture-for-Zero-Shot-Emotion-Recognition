@@ -1,0 +1,11 @@
+{
+  "accuracy": 0.3958333333333333,
+  "macro_f1": 0.3874435895486202,
+  "acc_seen": 0.6095890410958904,
+  "acc_unseen": 0.3958333333333333,
+  "harmonic": 0.47998864604030655,
+  "held_out": [],
+  "mode": "multimodal",
+  "fusion_type": "cross_attention",
+  "baseline": "model"
+}

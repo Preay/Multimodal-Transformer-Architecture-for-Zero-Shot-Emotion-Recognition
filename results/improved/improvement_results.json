@@ -1,0 +1,11 @@
+{
+  "best_accuracy": 43.38085539714868,
+  "improvements": [
+    "Focal Loss for class imbalance",
+    "Label Smoothing for generalization",
+    "Simple data augmentation",
+    "Weighted sampling for class balance",
+    "Learning rate scheduling",
+    "Gradient clipping"
+  ]
+}

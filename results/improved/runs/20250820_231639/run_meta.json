@@ -1,0 +1,46 @@
+{
+  "args": {
+    "dataset_name": "ravdess",
+    "dataset_path": null,
+    "data_config": "configs/data_paths.json",
+    "features_dir": "results/improved/features",
+    "mode": "multimodal",
+    "fusion_type": "cross_attention",
+    "fusion_alias": "cross_attn",
+    "num_classes": 8,
+    "epochs": 30,
+    "batch_size": 32,
+    "lr": 0.0001,
+    "weight_decay": 0.0001,
+    "contrastive_weight": 0.2,
+    "save_dir": "results/improved/runs",
+    "use_temporal": false,
+    "held_out": null,
+    "balanced_ce": false,
+    "normalize_z": true,
+    "seed": 42,
+    "input_dim_audio": 768,
+    "input_dim_vision": 768,
+    "use_weighted_sampler": true,
+    "amp": true,
+    "early_stop_patience": 7,
+    "use_gating": true,
+    "gate_entropy_weight": 0.0,
+    "config": null,
+    "lambda_contrastive": null,
+    "lambda_focal": 0.0,
+    "lambda_proto_align": 0.0,
+    "p_drop": 0.0,
+    "alpha_semantic": 1.0
+  },
+  "seed": 42,
+  "cuda": {
+    "available": true,
+    "device_count": 1,
+    "device_name": "NVIDIA GeForce RTX 4060 Laptop GPU"
+  },
+  "env": {
+    "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+    "torch": "2.5.1+cu121"
+  }
+}
