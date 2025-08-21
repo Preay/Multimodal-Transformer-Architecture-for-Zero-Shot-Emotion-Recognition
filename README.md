@@ -1,130 +1,181 @@
-# Multimodal Zero-Shot Emotion Recognition (ZSER)
+## Multimodal Zero-Shot Emotion Recognition (Z-SER)
 
-This repository implements a multimodal zero-shot emotion recognition system that classifies human emotions using audio and visual data from the [RAVDESS dataset](https://zenodo.org/record/1188976). The system leverages pretrained Wav2Vec2 and Vision Transformer (ViT) models, enhanced with cross-modal attention, temporal modeling, and prototype-based zero-shot classification.
+End-to-end Python/PyTorch pipeline for Multimodal Zero‑Shot Emotion Recognition on RAVDESS, with unified feature extraction, actor‑aware splits, reproducible training, and evaluation/visualization.
 
-Note: Dataset files are not included due to size and licensing constraints. Please download the dataset manually (instructions below).
+### 0) Environment
 
-## Key Results (Zero-Shot on RAVDESS)
-
-- Accuracy: 39.1%
-- Macro F1-score: 37.2%
-- Parameters: ~2.5M
-- GPU Memory: ~4GB during training
-
-## Project Structure
-
-multimodal_zser/
-├── models/
-│ ├── audio_zser_model.py # Audio-only architecture
-│ └── multimodal_zser_model.py # Cross-modal fusion model
-├── scripts/
-│ ├── extract_features.py # Feature extraction
-│ ├── train_model.py # Training loop
-│ └── evaluate.py # Evaluation & visualizations
-├── utils/
-│ └── interpretability.py # t-SNE & attention maps
-├── results/
-│ └── improved/ # Output visualizations/logs
-├── main.py # Unified pipeline
-├── requirements.txt # Dependencies
-└── README.md
-
-
-
-## Requirements
-
-Install dependencies with:
-
-
+Windows PowerShell example:
+```bash
+python -m venv zser_env
+zser_env\Scripts\activate
 pip install -r requirements.txt
+```
+Linux/macOS:
+```bash
+python -m venv zser_env
+source zser_env/bin/activate
+pip install -r requirements.txt
+```
 
-Key Libraries
-Python 3.9+
+### 1) Dataset and paths
 
-PyTorch ≥ 2.0
+Expected layout:
+```
+data/ravdess/
+  audio/{audio_speech_actors_01-24, audio_song_actors_01-24}/Actor_XX/*.wav
+  vision/{video_speech_actors_01-24, video_song_actors_01-24}/Actor_XX/*.mp4
+```
 
-torchvision
+Provide a config at `configs/data_paths.json` (edit as needed):
+```json
+{
+  "data_root": "data/ravdess",
+  "audio_roots": [
+    "data/ravdess/audio/audio_speech_actors_01-24",
+    "data/ravdess/audio/audio_song_actors_01-24"
+  ],
+  "video_roots": [
+    "data/ravdess/vision/video_speech_actors_01-24",
+    "data/ravdess/vision/video_song_actors_01-24"
+  ]
+}
+```
+If a key is missing, the extractor falls back to sensible defaults based on `data_root`.
 
-torchaudio
+### 2) Feature extraction (idempotent)
 
-transformers
+Extract audio (Wav2Vec2) and vision (ViT) features. Files are named by the WAV stem and saved as `.pt` tensors.
+```bash
+python scripts/extract_features.py \
+  --dataset_name ravdess \
+  --data_config configs/data_paths.json \
+  --modality both \
+  --save_dir results/improved/features \
+  --device cuda
+```
+Useful flags:
+- `--audio_backbone {wav2vec2_base, distilhubert}`
+- `--vision_backbone {vit_base, vit_tiny, mobilevit}`
+- `--force` re-extracts even if files already exist
 
-scikit-learn
+Outputs:
+- `results/improved/features/audio/<stem>.pt`
+- `results/improved/features/vision/<stem>.pt`
 
-OpenCV
+### 3) Train (multimodal)
 
-matplotlib
+Train with actor‑aware 60/20/20 splits, early stopping on validation macro‑F1, AMP, and ReduceLROnPlateau. The alias `--fusion cross_attn` maps to `--fusion_type cross_attention`.
+```bash
+python scripts/train_model.py \
+  --dataset_name ravdess \
+  --data_config configs/data_paths.json \
+  --features_dir results/improved/features \
+  --mode multimodal \
+  --fusion cross_attn \
+  --epochs 30 \
+  --batch_size 32 \
+  --lr 1e-4 \
+  --weight_decay 1e-4 \
+  --seed 42 \
+  --save_dir results/improved/runs \
+  --amp \
+  --balanced_ce \
+  --use_weighted_sampler
+```
 
+Training artifacts (under `results/improved/runs/<timestamp>/`):
+- `best.ckpt` (weights)
+- `run_meta.json` (args, seed, environment, CUDA, git commit)
+- `train_log.csv` (epoch, loss, val metrics)
+- `val_metrics.json` and `val_metrics.csv`
+- `test_metrics.json` and `test_metrics.csv`
+- `model_card.md`
+- `SUMMARY.md` (also printed to console)
 
+### 4) Evaluate best checkpoint
 
-# Dataset Setup (RAVDESS)
-Download the RAVDESS dataset and organize it as follows:
+Standard evaluation + zero-shot prototype test; writes confusion matrix and t‑SNE figures.
+```bash
+python scripts/evaluate.py \
+  --dataset_name ravdess \
+  --data_config configs/data_paths.json \
+  --features_dir results/improved/features \
+  --mode multimodal \
+  --fusion_type cross_attention \
+  --checkpoint results/improved/runs/<timestamp>/best.ckpt \
+  --batch_size 32 \
+  --save_dir results/improved/eval_best \
+  --normalize_z
+```
 
+Evaluation artifacts (under `results/improved/eval_best/`):
+- `metrics.json` (ZSL accuracy/macro‑F1 and GZSL breakdown)
+- `confusion_matrix_ravdess.png`
+- `tsne_seen.png`, `tsne_unseen.png`
+- `explanations/sample_*_similarities.png` (prototype similarity bars)
 
-data/
-└── ravdess/
-    ├── audio/
-    │   ├── audio_speech_actors_01-24/
-    │   └── audio_song_actors_01-24/
-    └── vision/
-        ├── video_speech_actors_01-24/
-        └── video_song_actors_01-24/
-# How to Run
-Step 1: Extract Features
+### 5) Lightweight hyperparameter sweep (optional)
 
-python scripts/extract_features.py --modality both
+Runs a small, reproducible grid and evaluates the best run automatically.
+```bash
+python scripts/small_sweep.py \
+  --dataset_name ravdess \
+  --data_config configs/data_paths.json \
+  --features_dir results/improved/features \
+  --save_dir results/improved/runs \
+  --eval_dir results/improved/eval_best \
+  --seed 42 \
+  --epochs 30 \
+  --amp
+```
 
-Step 2: Train Model
+Grid (by default):
+- fusion in {cross_attn, mlp, late, early}
+- lr in {1e-3, 5e-4, 1e-4}
+- batch_size in {16, 32}
+- weight_decay in {0, 1e-4}
+- contrastive on/off
 
-python scripts/train_model.py --fusion cross_attn --epochs 30
+### 6) Zero-shot protocol
 
-Step 3: Evaluate Model (Zero-Shot)
+Class‑held‑out zero‑shot can be enabled by specifying held‑out emotion names during training/evaluation:
+```bash
+# train with held-out classes (example)
+python scripts/train_model.py ... --held_out fearful disgust
 
+# evaluate using the same held-out list
+python scripts/evaluate.py ... --held_out fearful disgust --use_zero_shot
+```
+Cosine‑similarity classification uses L2‑normalized embeddings and class centroids computed from the training (seen) split.
 
-python scripts/evaluate.py --use_zero_shot
+### 7) Where things are saved
 
-# Performance Summary
+- Features: `results/improved/features/{audio,vision}/*.pt`
+- Training run (timestamped): `results/improved/runs/<timestamp>/`
+  - `best.ckpt`, `run_meta.json`, `train_log.csv`, `val_metrics.*`, `test_metrics.*`, `model_card.md`, `SUMMARY.md`
+- Evaluation: `results/improved/eval_best/`
+  - `metrics.json`, `confusion_matrix_ravdess.png`, `tsne_seen.png`, `tsne_unseen.png`, `explanations/*`
 
-Metric	Value
-Accuracy	39.1%
-Macro F1	37.2%
+### 8) Reproducibility
 
-# Visual outputs are saved in results/improved/:
+- Fixed seeds for `random`, `numpy`, and `torch`; CuDNN deterministic on when available.
+- All scripts accept `--seed` and log the used seed in `run_meta.json`.
+- Actor‑aware stratified splits (no actor leakage between train/val/test) with fixed seed.
 
-Confusion Matrix: confusion_matrix_ravdess.png
+### 9) Troubleshooting
 
-Embedding Space (t-SNE): tsne_ravdess.png
+- Windows console encoding: logs avoid non‑ASCII characters.
+- Vision pairing: videos are resolved from audio stems across the configured `video_roots`. Missing matches are logged and saved as zero vectors.
+- Face detection: if no face is detected in the middle frame, a zero vector is saved (logged as "No face").
+- Performance: ensure features exist for both modalities; prefer `--amp` and `--balanced_ce`, and consider running `scripts/small_sweep.py` for a quick hyper‑param search.
 
-Attention Maps: attn_audio_ravdess.png, attn_vision_ravdess.png
+### 10) CLI help
 
-# Key Features
-Zero-shot classification using prototype learning
+```bash
+python scripts/extract_features.py --help
+python scripts/train_model.py --help
+python scripts/evaluate.py --help
+```
 
-Wav2Vec2 audio embeddings
-
-ViT-based facial feature extraction
-
-BiLSTM + attention pooling
-
-Multiple fusion strategies (early, late, MLP, cross-attn)
-
-Contrastive learning for robust embedding space
-
-Visual analytics for model interpretability
-
-# Citation & Acknowledgments
-
-This repository was developed as part of a master's dissertation at Queen Mary University of London.
-
-If you use this work, please cite the RAVDESS dataset and relevant papers referenced in this project.
-
-# To Do
-
- Add text modality (trimodal ZSER)
-
- Ensemble fusion strategies
-
- Support multi-label emotion classification
-
- Enable real-time inference (e.g., webcam demo)
-
+### Citation
+If you use this code, please cite the RAVDESS dataset and relevant backbone models (Wav2Vec2, ViT).
